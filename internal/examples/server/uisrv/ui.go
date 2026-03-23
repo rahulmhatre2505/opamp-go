@@ -2,10 +2,13 @@ package uisrv
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"path"
+	"sort"
+	"strings"
 	"text/template"
 	"time"
 
@@ -23,6 +26,34 @@ var (
 )
 
 var logger = log.New(log.Default().Writer(), "[UI] ", log.Default().Flags()|log.Lmsgprefix|log.Lmicroseconds)
+
+type fleetPageData struct {
+	Summary fleetSummary
+	Agents  []fleetAgentRow
+}
+
+type fleetSummary struct {
+	TotalAgents           int
+	HealthyAgents         int
+	UnhealthyAgents       int
+	AgentsWithConfigError int
+}
+
+type fleetAgentRow struct {
+	InstanceID         string
+	DetailURL          string
+	StatusLabel        string
+	StatusClass        string
+	StatusReason       string
+	StartedAt          string
+	ServiceName        string
+	Environment        string
+	HostName           string
+	RemoteConfigLabel  string
+	RemoteConfigClass  string
+	RemoteConfigReason string
+	MessageCount       int
+}
 
 func Start(rootDir string) {
 	htmlDir = path.Join(rootDir, "uisrv/html")
@@ -63,7 +94,127 @@ func renderTemplate(w http.ResponseWriter, htmlTemplateFile string, data interfa
 }
 
 func renderRoot(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, "root.html", data.AllAgents.GetAllAgentsReadonlyClone())
+	renderTemplate(w, "root.html", newFleetPageData(data.AllAgents.GetAllAgentsReadonlyClone()))
+}
+
+func newFleetPageData(agents map[data.InstanceId]*data.Agent) fleetPageData {
+	rows := make([]fleetAgentRow, 0, len(agents))
+	summary := fleetSummary{}
+
+	for _, agent := range agents {
+		row := newFleetAgentRow(agent)
+		rows = append(rows, row)
+
+		summary.TotalAgents++
+		if row.StatusClass == "status-healthy" {
+			summary.HealthyAgents++
+		} else {
+			summary.UnhealthyAgents++
+		}
+		if row.RemoteConfigClass == "status-error" {
+			summary.AgentsWithConfigError++
+		}
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].StatusLabel != rows[j].StatusLabel {
+			return rows[i].StatusLabel < rows[j].StatusLabel
+		}
+		return rows[i].InstanceID < rows[j].InstanceID
+	})
+
+	return fleetPageData{Summary: summary, Agents: rows}
+}
+
+func newFleetAgentRow(agent *data.Agent) fleetAgentRow {
+	row := fleetAgentRow{
+		InstanceID:        agent.InstanceIdStr,
+		DetailURL:         "/agent?instanceid=" + agent.InstanceIdStr,
+		StatusLabel:       "Unknown",
+		StatusClass:       "status-unknown",
+		StartedAt:         "—",
+		ServiceName:       "—",
+		Environment:       "—",
+		HostName:          "—",
+		RemoteConfigLabel: "Not reported",
+		RemoteConfigClass: "status-unknown",
+		MessageCount:      len(agent.CustomMessageHistory),
+	}
+
+	if agent.Status != nil {
+		row.ServiceName = preferredAgentAttribute(agent.Status.AgentDescription,
+			"service.name", "service.namespace", "service.instance.id")
+		row.Environment = preferredAgentAttribute(agent.Status.AgentDescription,
+			"deployment.environment", "service.namespace")
+		row.HostName = preferredAgentAttribute(agent.Status.AgentDescription,
+			"host.name", "host.id", "k8s.pod.name")
+
+		if agent.Status.Health != nil {
+			if agent.Status.Health.Healthy {
+				row.StatusLabel = "Healthy"
+				row.StatusClass = "status-healthy"
+			} else {
+				row.StatusLabel = "Unhealthy"
+				row.StatusClass = "status-error"
+			}
+
+			if agent.Status.Health.LastError != "" {
+				row.StatusReason = agent.Status.Health.LastError
+			}
+		}
+
+		if !agent.StartedAt.IsZero() {
+			row.StartedAt = agent.StartedAt.Format(time.RFC3339)
+		}
+
+		if agent.Status.RemoteConfigStatus != nil {
+			switch {
+			case agent.Status.RemoteConfigStatus.ErrorMessage != "":
+				row.RemoteConfigLabel = "Error"
+				row.RemoteConfigClass = "status-error"
+				row.RemoteConfigReason = agent.Status.RemoteConfigStatus.ErrorMessage
+			case len(agent.Status.RemoteConfigStatus.LastRemoteConfigHash) > 0:
+				row.RemoteConfigLabel = "Applied"
+				row.RemoteConfigClass = "status-healthy"
+			default:
+				row.RemoteConfigLabel = "Pending"
+				row.RemoteConfigClass = "status-warning"
+			}
+		}
+	}
+
+	return row
+}
+
+func preferredAgentAttribute(desc *protobufs.AgentDescription, keys ...string) string {
+	if desc == nil {
+		return "—"
+	}
+
+	for _, key := range keys {
+		if value := agentAttribute(desc.IdentifyingAttributes, key); value != "" {
+			return value
+		}
+		if value := agentAttribute(desc.NonIdentifyingAttributes, key); value != "" {
+			return value
+		}
+	}
+
+	return "—"
+}
+
+func agentAttribute(attrs []*protobufs.KeyValue, key string) string {
+	for _, attr := range attrs {
+		if attr.GetKey() == key {
+			value := fmt.Sprint(attr.GetValue())
+			value = strings.TrimPrefix(value, "string_value:")
+			value = strings.Trim(value, " \t\n\"")
+			if value != "" {
+				return value
+			}
+		}
+	}
+	return ""
 }
 
 func renderAgent(w http.ResponseWriter, r *http.Request) {
@@ -258,34 +409,18 @@ func opampConnectionSettings(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	}
-
-	rawProxyURL := r.Form.Get("proxy_url")
-	if len(rawProxyURL) > 0 {
-		proxyURL, err := url.Parse(rawProxyURL)
+	proxyURL := r.Form.Get("proxy_url")
+	if len(proxyURL) > 0 {
+		u, err := url.Parse(proxyURL)
 		if err != nil {
-			logger.Printf("Unable to parse %q as URL: %v", rawProxyURL, err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		offers.Opamp.Proxy = &protobufs.ProxyConnectionSettings{
-			Url: proxyURL.String(),
+			Url: u.String(),
 		}
 	}
 
 	data.AllAgents.OfferAgentConnectionSettings(instanceId, offers)
-
-	logger.Printf("Waiting for agent %s to reconnect\n", instanceId)
-
-	// Wait for up to 5 seconds for a Status update, which is expected
-	// to be reported by the agent after we set the remote config.
-	timer := time.NewTicker(time.Second * 5)
-
-	// TODO: wait for agent to reconnect instead of waiting full 5 seconds.
-
-	select {
-	case <-timer.C:
-		logger.Printf("Time out waiting for agent %s to reconnect\n", instanceId)
-	}
-
 	http.Redirect(w, r, "/agent?instanceid="+uid.String(), http.StatusSeeOther)
 }
