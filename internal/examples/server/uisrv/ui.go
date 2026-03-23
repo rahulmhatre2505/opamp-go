@@ -28,8 +28,9 @@ var (
 var logger = log.New(log.Default().Writer(), "[UI] ", log.Default().Flags()|log.Lmsgprefix|log.Lmicroseconds)
 
 type fleetPageData struct {
-	Summary fleetSummary
-	Agents  []fleetAgentRow
+	Summary            fleetSummary
+	Agents             []fleetAgentRow
+	EnvironmentOptions []string
 }
 
 type fleetSummary struct {
@@ -48,6 +49,7 @@ type fleetAgentRow struct {
 	StatusReason       string
 	StartedAt          string
 	ServiceName        string
+	ServiceVersion     string
 	Environment        string
 	HostName           string
 	RemoteConfigLabel  string
@@ -101,6 +103,7 @@ func renderRoot(w http.ResponseWriter, r *http.Request) {
 func newFleetPageData(agents map[data.InstanceId]*data.Agent) fleetPageData {
 	rows := make([]fleetAgentRow, 0, len(agents))
 	summary := fleetSummary{}
+	environmentSet := map[string]struct{}{}
 
 	for _, agent := range agents {
 		row := newFleetAgentRow(agent)
@@ -115,6 +118,9 @@ func newFleetPageData(agents map[data.InstanceId]*data.Agent) fleetPageData {
 		if row.RemoteConfigClass == "status-error" {
 			summary.AgentsWithConfigError++
 		}
+		if row.Environment != "—" {
+			environmentSet[row.Environment] = struct{}{}
+		}
 	}
 
 	sort.Slice(rows, func(i, j int) bool {
@@ -127,7 +133,13 @@ func newFleetPageData(agents map[data.InstanceId]*data.Agent) fleetPageData {
 		return rows[i].InstanceID < rows[j].InstanceID
 	})
 
-	return fleetPageData{Summary: summary, Agents: rows}
+	environments := make([]string, 0, len(environmentSet))
+	for environment := range environmentSet {
+		environments = append(environments, environment)
+	}
+	sort.Strings(environments)
+
+	return fleetPageData{Summary: summary, Agents: rows, EnvironmentOptions: environments}
 }
 
 func newFleetAgentRow(agent *data.Agent) fleetAgentRow {
@@ -139,6 +151,7 @@ func newFleetAgentRow(agent *data.Agent) fleetAgentRow {
 		StatusClass:       "status-unknown",
 		StartedAt:         "—",
 		ServiceName:       "—",
+		ServiceVersion:    "—",
 		Environment:       "—",
 		HostName:          "—",
 		RemoteConfigLabel: "Not reported",
@@ -149,6 +162,8 @@ func newFleetAgentRow(agent *data.Agent) fleetAgentRow {
 	if agent.Status != nil {
 		row.ServiceName = preferredAgentAttribute(agent.Status.AgentDescription,
 			"service.name", "service.namespace", "service.instance.id")
+		row.ServiceVersion = preferredAgentAttribute(agent.Status.AgentDescription,
+			"service.version")
 		row.Environment = preferredAgentAttribute(agent.Status.AgentDescription,
 			"deployment.environment", "service.namespace")
 		row.HostName = preferredAgentAttribute(agent.Status.AgentDescription,

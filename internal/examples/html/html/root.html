@@ -1,5 +1,60 @@
 {{ template "header.html" . }}
 
+<script>
+function updateFleetDashboard() {
+    const searchInput = document.getElementById("agent-search");
+    const environmentSelect = document.getElementById("environment-filter");
+    const rows = document.querySelectorAll("[data-agent-row]");
+    const emptyState = document.getElementById("fleet-filter-empty");
+
+    const search = (searchInput?.value || "").toLowerCase().trim();
+    const environment = environmentSelect?.value || "";
+
+    let visibleRows = 0;
+    rows.forEach(function (row) {
+        const haystack = (row.dataset.search || "").toLowerCase();
+        const rowEnvironment = row.dataset.environment || "";
+        const matchesSearch = search === "" || haystack.includes(search);
+        const matchesEnvironment = environment === "" || rowEnvironment === environment;
+        const visible = matchesSearch && matchesEnvironment;
+        row.style.display = visible ? "" : "none";
+        if (visible) {
+            visibleRows += 1;
+        }
+    });
+
+    if (emptyState) {
+        emptyState.hidden = visibleRows !== 0;
+    }
+
+    updateSelectedAgentCount();
+}
+
+function toggleAllAgents(source) {
+    document.querySelectorAll("[data-agent-checkbox]").forEach(function (checkbox) {
+        const row = checkbox.closest("tr");
+        if (row && row.style.display === "none") {
+            return;
+        }
+        checkbox.checked = source.checked;
+    });
+    updateSelectedAgentCount();
+}
+
+function updateSelectedAgentCount() {
+    const count = document.querySelectorAll("[data-agent-checkbox]:checked").length;
+    const label = document.getElementById("selected-agent-count");
+    if (label) {
+        label.textContent = count + (count === 1 ? " agent selected" : " agents selected");
+    }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    updateFleetDashboard();
+    updateSelectedAgentCount();
+});
+</script>
+
 <div class="summary-grid">
     <div class="summary-card">
         <span class="label">Connected agents</span>
@@ -28,13 +83,28 @@
         No agents are currently connected to the server.
     </div>
     {{ else }}
+    <div class="toolbar">
+        <div class="toolbar-group">
+            <input id="agent-search" class="input" type="search" placeholder="Search by host, instance ID, service, version, environment..." oninput="updateFleetDashboard()">
+            <select id="environment-filter" class="select" onchange="updateFleetDashboard()">
+                <option value="">All environments</option>
+                {{ range .EnvironmentOptions }}
+                <option value="{{ . }}">{{ . }}</option>
+                {{ end }}
+            </select>
+        </div>
+        <div class="muted small" id="selected-agent-count">0 agents selected</div>
+    </div>
+
     <table>
         <thead>
             <tr>
+                <th><input type="checkbox" aria-label="Select all agents" onchange="toggleAllAgents(this)"></th>
                 <th>Agent</th>
                 <th>Status</th>
                 <th>Started</th>
                 <th>Service</th>
+                <th>Version</th>
                 <th>Environment</th>
                 <th>Host</th>
                 <th>Remote config</th>
@@ -43,7 +113,8 @@
         </thead>
         <tbody>
         {{ range .Agents }}
-            <tr>
+            <tr data-agent-row data-environment="{{ .Environment }}" data-search="{{ .DisplayName }} {{ .InstanceID }} {{ .ServiceName }} {{ .ServiceVersion }} {{ .Environment }} {{ .HostName }} {{ .StatusLabel }} {{ .RemoteConfigLabel }}">
+                <td><input type="checkbox" data-agent-checkbox onchange="updateSelectedAgentCount()"></td>
                 <td>
                     <a href="{{ .DetailURL }}"><strong>{{ .DisplayName }}</strong></a>
                     <div class="muted small wrap-anywhere">{{ .InstanceID }}</div>
@@ -56,6 +127,7 @@
                 </td>
                 <td class="nowrap">{{ .StartedAt }}</td>
                 <td>{{ .ServiceName }}</td>
+                <td>{{ .ServiceVersion }}</td>
                 <td>{{ .Environment }}</td>
                 <td>{{ .HostName }}</td>
                 <td>
@@ -69,6 +141,10 @@
         {{ end }}
         </tbody>
     </table>
+
+    <div id="fleet-filter-empty" class="empty-state" hidden>
+        No agents match the current search and filter criteria.
+    </div>
     {{ end }}
 </section>
 
