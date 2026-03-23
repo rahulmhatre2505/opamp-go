@@ -12,6 +12,32 @@
       href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.1.0/styles/default.min.css">
 <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.1.0/highlight.min.js"></script>
 <script>hljs.highlightAll();</script>
+<script>
+function copyEffectiveConfig() {
+    const button = document.getElementById("copy-effective-config");
+    const config = document.getElementById("effective-config");
+    if (!button || !config) {
+        return;
+    }
+
+    const originalLabel = button.textContent;
+    const text = config.textContent || "";
+
+    navigator.clipboard.writeText(text).then(function () {
+        button.textContent = "Copied";
+        button.classList.add("button-success");
+        window.setTimeout(function () {
+            button.textContent = originalLabel;
+            button.classList.remove("button-success");
+        }, 1500);
+    }).catch(function () {
+        button.textContent = "Copy failed";
+        window.setTimeout(function () {
+            button.textContent = originalLabel;
+        }, 1500);
+    });
+}
+</script>
 
 <hr/>
 
@@ -64,8 +90,11 @@
 <table width="100%">
     <tr>
         <td valign="top">
-            Current Effective Configuration:<br/>
-            <pre><code class="language-yaml">{{ .EffectiveConfig }}</code></pre>
+            <div class="button-row">
+                <span>Current Effective Configuration:</span>
+                <button id="copy-effective-config" class="button" type="button" onclick="copyEffectiveConfig()">Copy YAML</button>
+            </div>
+            <pre><code id="effective-config" class="language-yaml">{{ .EffectiveConfig }}</code></pre>
         </td>
         <td valign="top">
             Additional Configuration:<br/>
@@ -145,9 +174,6 @@
     <input type="submit" value="Set connection settings"/>
 </form>
 
-</body>
-</html>
-
 <hr/>
 
 <h3>Custom Messages</h3>
@@ -177,4 +203,8 @@ Last {{ len .CustomMessageHistory }} Received Messages
 <pre class="log-container"><code>{{ range .CustomMessageHistory }}{{ . }}
 {{ end }}
 </code></pre>
-{{ end }} 
+{{ end }}
+
+</div>
+</body>
+</html>

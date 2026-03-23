@@ -1,23 +1,77 @@
 {{ template "header.html" . }}
 
-<h2>Agents</h2>
+<div class="summary-grid">
+    <div class="summary-card">
+        <span class="label">Connected agents</span>
+        <div class="value">{{ .Summary.TotalAgents }}</div>
+    </div>
+    <div class="summary-card">
+        <span class="label">Healthy</span>
+        <div class="value">{{ .Summary.HealthyAgents }}</div>
+    </div>
+    <div class="summary-card">
+        <span class="label">Needs attention</span>
+        <div class="value">{{ .Summary.UnhealthyAgents }}</div>
+    </div>
+    <div class="summary-card">
+        <span class="label">Config errors</span>
+        <div class="value">{{ .Summary.AgentsWithConfigError }}</div>
+    </div>
+</div>
 
-<style>
-    td {
-        padding: 5px
-    }
-</style>
+<section class="panel">
+    <h2 class="section-title">Fleet dashboard</h2>
+    <p class="section-subtitle">Review agent health, rollout status, and common identifying metadata before drilling into instance details.</p>
 
-<table width=100% border="1" style="border-collapse: collapse">
-    <tr>
-        <th>Instance ID</th>
-    </tr>
-{{ range . }}
-    <tr>
-        <td><a href="agent?instanceid={{ .InstanceIdStr }}">{{ .InstanceIdStr }}</a></td>
-    </tr>
-{{ end }}
-</table>
+    {{ if eq (len .Agents) 0 }}
+    <div class="empty-state">
+        No agents are currently connected to the server.
+    </div>
+    {{ else }}
+    <table>
+        <thead>
+            <tr>
+                <th>Agent</th>
+                <th>Status</th>
+                <th>Started</th>
+                <th>Service</th>
+                <th>Environment</th>
+                <th>Host</th>
+                <th>Remote config</th>
+                <th>Messages</th>
+            </tr>
+        </thead>
+        <tbody>
+        {{ range .Agents }}
+            <tr>
+                <td>
+                    <a href="{{ .DetailURL }}"><strong>{{ .DisplayName }}</strong></a>
+                    <div class="muted small wrap-anywhere">{{ .InstanceID }}</div>
+                </td>
+                <td>
+                    <span class="status-pill {{ .StatusClass }}">{{ .StatusLabel }}</span>
+                    {{ if .StatusReason }}
+                    <div class="muted small">{{ .StatusReason }}</div>
+                    {{ end }}
+                </td>
+                <td class="nowrap">{{ .StartedAt }}</td>
+                <td>{{ .ServiceName }}</td>
+                <td>{{ .Environment }}</td>
+                <td>{{ .HostName }}</td>
+                <td>
+                    <span class="status-pill {{ .RemoteConfigClass }}">{{ .RemoteConfigLabel }}</span>
+                    {{ if .RemoteConfigReason }}
+                    <div class="muted small">{{ .RemoteConfigReason }}</div>
+                    {{ end }}
+                </td>
+                <td>{{ .MessageCount }}</td>
+            </tr>
+        {{ end }}
+        </tbody>
+    </table>
+    {{ end }}
+</section>
 
+</div>
 </body>
 </html>

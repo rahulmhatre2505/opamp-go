@@ -1,4 +1,253 @@
-<html >
-<title>OpAMP Server</title>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OpAMP Server</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f6f8fb;
+            --surface: #ffffff;
+            --surface-muted: #f9fafb;
+            --border: #d9e0ea;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --healthy: #0f9d58;
+            --warning: #c27a00;
+            --error: #d93025;
+            --unknown: #6b7280;
+            --accent: #2563eb;
+            --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .page {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 32px 24px 40px;
+        }
+
+        .page-header {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 24px;
+        }
+
+        .page-header h1 {
+            margin: 0;
+            font-size: 2rem;
+        }
+
+        .page-header p {
+            margin: 8px 0 0;
+            color: var(--muted);
+            max-width: 760px;
+            line-height: 1.5;
+        }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+        }
+
+        .panel + .panel {
+            margin-top: 24px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .summary-card {
+            background: linear-gradient(180deg, var(--surface) 0%, var(--surface-muted) 100%);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+        }
+
+        .summary-card .label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .summary-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .status-pill::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .status-healthy {
+            color: var(--healthy);
+            background: rgba(15, 157, 88, 0.1);
+        }
+
+        .status-warning {
+            color: var(--warning);
+            background: rgba(194, 122, 0, 0.12);
+        }
+
+        .status-error {
+            color: var(--error);
+            background: rgba(217, 48, 37, 0.1);
+        }
+
+        .status-unknown {
+            color: var(--unknown);
+            background: rgba(107, 114, 128, 0.12);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 14px 12px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            color: var(--muted);
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .small {
+            font-size: 0.88rem;
+        }
+
+        .wrap-anywhere {
+            overflow-wrap: anywhere;
+        }
+
+        .button-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface);
+            color: var(--text);
+            padding: 8px 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .button:hover {
+            text-decoration: none;
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .button-success {
+            color: var(--healthy);
+            border-color: rgba(15, 157, 88, 0.3);
+        }
+
+        .nowrap {
+            white-space: nowrap;
+        }
+
+        .empty-state {
+            padding: 32px;
+            text-align: center;
+            color: var(--muted);
+            border: 1px dashed var(--border);
+            border-radius: 12px;
+            background: var(--surface-muted);
+        }
+
+        .section-title {
+            margin: 0 0 8px;
+            font-size: 1.25rem;
+        }
+
+        .section-subtitle {
+            margin: 0 0 20px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+    </style>
+</head>
 <body>
-<h1>OpAMP Server</h1>
+<div class="page">
+    <div class="page-header">
+        <div>
+            <h1>OpAMP Server</h1>
+            <p>Example fleet management UI for connected OpenTelemetry agents. This view helps validate agent health, remote config rollout state, and basic control-plane activity.</p>
+        </div>
+    </div>
