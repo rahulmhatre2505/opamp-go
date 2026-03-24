@@ -46,6 +46,12 @@ func (agents *Agents) SetCustomConfigForAgent(
 	config *protobufs.AgentConfigMap,
 	notifyNextStatusUpdate chan<- struct{},
 ) {
+	if config == nil || config.ConfigMap == nil || config.ConfigMap[""] == nil {
+		return
+	}
+
+	setPersistedCustomConfig(agentId, string(config.ConfigMap[""].Body))
+
 	agent := agents.FindAgent(agentId)
 	if agent != nil {
 		agent.SetCustomConfig(config, notifyNextStatusUpdate)
@@ -84,19 +90,31 @@ func (agents *Agents) FindAgent(agentId InstanceId) *Agent {
 
 func (agents *Agents) FindOrCreateAgent(agentId InstanceId, conn types.Connection) *Agent {
 	agents.mux.Lock()
-	defer agents.mux.Unlock()
 
 	// Ensure the Agent is in the agentsById map.
 	agent := agents.agentsById[agentId]
+	created := false
 	if agent == nil {
 		agent = NewAgent(agentId, conn)
 		agents.agentsById[agentId] = agent
+		created = true
+	}
 
-		// Ensure the Agent's instance id is associated with the connection.
-		if agents.connections[conn] == nil {
-			agents.connections[conn] = map[InstanceId]bool{}
+	// Ensure the Agent's instance id is associated with the connection.
+	if agents.connections[conn] == nil {
+		agents.connections[conn] = map[InstanceId]bool{}
+	}
+	agents.connections[conn][agentId] = true
+	agents.mux.Unlock()
+
+	if created {
+		if configText, ok := getPersistedCustomConfig(agentId); ok {
+			agent.SetCustomConfig(&protobufs.AgentConfigMap{
+				ConfigMap: map[string]*protobufs.AgentConfigFile{
+					"": {Body: []byte(configText)},
+				},
+			}, nil)
 		}
-		agents.connections[conn][agentId] = true
 	}
 
 	return agent

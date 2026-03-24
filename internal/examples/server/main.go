@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 
 	"github.com/open-telemetry/opamp-go/internal/examples/server/data"
 	"github.com/open-telemetry/opamp-go/internal/examples/server/opampsrv"
@@ -25,6 +26,10 @@ func main() {
 	}
 
 	logger.Println("OpAMP Server starting...")
+
+	if err = data.InitCustomConfigStore(filepath.Join(curDir, "custom_configs.json")); err != nil {
+		logger.Printf("Cannot initialize custom config store: %v", err)
+	}
 
 	uisrv.Start(curDir)
 	opampSrv := opampsrv.NewServer(&data.AllAgents, emitMetrics)
