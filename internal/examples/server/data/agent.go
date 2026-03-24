@@ -256,6 +256,8 @@ func (agent *Agent) updateEffectiveConfig(
 				// config as a set and show the set in the UI.
 				agent.EffectiveConfig = agent.EffectiveConfig + string(cfg.Body)
 			}
+
+			persistEffectiveConfigSnapshot(agent.InstanceId, agent.EffectiveConfig)
 		}
 	}
 }

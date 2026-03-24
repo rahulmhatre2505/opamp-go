@@ -77,6 +77,15 @@ func setPersistedCustomConfig(agentID InstanceId, config string) {
 
 	persistedCustomConfigs.items[uuid.UUID(agentID).String()] = config
 	persistedCustomConfigs.saveLocked()
+
+	persistedCustomConfigs.persistAgentConfigFileLocked(agentID, "desired_custom.yaml", config)
+}
+
+func persistEffectiveConfigSnapshot(agentID InstanceId, config string) {
+	persistedCustomConfigs.mux.Lock()
+	defer persistedCustomConfigs.mux.Unlock()
+
+	persistedCustomConfigs.persistAgentConfigFileLocked(agentID, "effective_snapshot.yaml", config)
 }
 
 func (s *customConfigStore) saveLocked() {
@@ -98,5 +107,26 @@ func (s *customConfigStore) saveLocked() {
 
 	if err = os.WriteFile(s.path, content, 0o644); err != nil {
 		logger.Printf("cannot persist custom configs to %q: %v", s.path, err)
+	}
+}
+
+func (s *customConfigStore) persistAgentConfigFileLocked(
+	agentID InstanceId,
+	fileName string,
+	content string,
+) {
+	if s.path == "" {
+		return
+	}
+
+	agentDir := filepath.Join(filepath.Dir(s.path), "agents", uuid.UUID(agentID).String())
+	if err := os.MkdirAll(agentDir, 0o755); err != nil {
+		logger.Printf("cannot create persisted config directory %q: %v", agentDir, err)
+		return
+	}
+
+	filePath := filepath.Join(agentDir, fileName)
+	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+		logger.Printf("cannot persist %s for agent %s to %q: %v", fileName, agentID, filePath, err)
 	}
 }
